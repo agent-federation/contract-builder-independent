@@ -105,6 +105,39 @@ def test_partial_scan():
     os.close(rootfd)
 
 
+def test_scan_exact_limit_not_truncated():
+    d = tempfile.mkdtemp()
+    for i in range(3):
+        with open(os.path.join(d, f"f{i}.txt"), "w") as f:
+            f.write("x")
+    rootfd = open_root(d)
+    entries, status = scan_entries(rootfd, 3)
+    assert status == "complete"
+    assert len(entries) == 3
+    os.close(rootfd)
+
+    rootfd2 = open_root(d)
+    entries2, status2 = scan_entries(rootfd2, 4)
+    assert status2 == "complete"
+    os.close(rootfd2)
+
+
+def test_scan_stat_failure_reported():
+    d = tempfile.mkdtemp()
+    # create a file then remove? Instead monkeypatch? Simpler: max_entries 0 triggers truncated not failed.
+    # Test that unreadable nested dir marks failed: create nested dir with no read permission
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    with open(os.path.join(sub, "x.txt"), "w") as f:
+        f.write("x")
+    os.chmod(sub, 0o000)
+    rootfd = open_root(d)
+    entries, status = scan_entries(rootfd, 100)
+    os.chmod(sub, 0o755)
+    os.close(rootfd)
+    assert status == "failed"
+
+
 def test_manifest_nesting_string_limits():
     deep = ("[" * 65) + "1" + ("]" * 65)
     try:
@@ -125,3 +158,12 @@ def test_implementation_identity_stable():
     b = implementation_digest()
     assert a == b
     assert a.startswith("sha256:")
+
+
+from pap_verifier.identities import implementation_digest_entries
+
+
+def test_implementation_identity_sensitive():
+    a = implementation_digest_entries([("a.py", b"x")])
+    b = implementation_digest_entries([("a.py", b"y")])
+    assert a != b

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
-from typing import Iterator, List, Tuple
+from typing import List, Tuple
 
 
 class PathError(Exception):
@@ -49,7 +49,7 @@ def open_root(root_path: str) -> int:
     except PermissionError as exc:
         raise PathError("pap.package.io", f"permission denied opening root: {exc}") from exc
     except OSError as exc:
-        if exc.errno in (20,):  # ENOTDIR
+        if exc.errno in (20,):
             raise PathError("pap.package.non-regular", f"package root is not a directory: {exc}") from exc
         raise PathError("pap.package.io", f"cannot open package root: {exc}") from exc
     try:
@@ -84,7 +84,7 @@ def open_relative(root_fd: int, rel_path: str) -> int:
             except PermissionError as exc:
                 raise PathError("pap.package.io", f"permission denied: {seg!r}: {exc}") from exc
             except OSError as exc:
-                if exc.errno == 40:  # ELOOP
+                if exc.errno == 40:
                     raise PathError("pap.package.symlink", f"symlink encountered: {seg!r}: {exc}") from exc
                 raise PathError("pap.package.io", f"cannot open {seg!r}: {exc}") from exc
             opened_fds.append(fd)
@@ -123,14 +123,12 @@ def read_file_bounded(fd: int, per_file_limit: int, total_counter: list[int], to
         remaining_file = per_file_limit - read_total
         remaining_total = total_limit - total_counter[0]
         if remaining_file <= 0:
-            # boundary: if EOF, finish; else limit exceeded
             try:
                 probe = os.read(fd, 1)
             except OSError as exc:
                 raise PathError("pap.package.io", f"read error: {exc}") from exc
             if probe == b"":
                 break
-            # push back? os.read consumed one byte beyond limit; append and raise
             raise PathError("pap.package.limit-exceeded", "per-file limit exceeded")
         if remaining_total <= 0:
             try:
@@ -156,53 +154,61 @@ def read_file_bounded(fd: int, per_file_limit: int, total_counter: list[int], to
 
 
 def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]], str]:
-    """Return (entries, status) where status is complete/truncated/failed."""
-    results: List[Tuple[str, bool]] = []
-    stack = []
+    results: list[tuple[str, bool]] = []
+    stack = [(root_fd, "", False)]
+    failed = False
+    truncated = False
+    seen_count = 0
     try:
-        # open root children lazily; root fd provided by caller
-        stack.append((root_fd, "", False))
-        truncated = False
-        while stack and len(results) < max_entries:
+        while stack:
             fd, prefix, owns = stack.pop()
             try:
-                for entry in os.scandir(fd):
-                    if len(results) >= max_entries:
-                        truncated = True
-                        break
-                    name = entry.name
-                    rel = (prefix + "/" + name) if prefix else name
+                it = os.scandir(fd)
+            except OSError:
+                failed = True
+                if owns:
                     try:
-                        st = entry.stat(follow_symlinks=False)
+                        os.close(fd)
                     except OSError:
-                        continue
-                    is_dir = stat.S_ISDIR(st.st_mode)
-                    is_file = stat.S_ISREG(st.st_mode)
-                    is_link = stat.S_ISLNK(st.st_mode)
-                    if is_link:
-                        results.append((rel, False))
-                        continue
-                    if is_dir:
-                        results.append((rel, True))
+                        pass
+                continue
+            try:
+                for entry in it:
+                    seen_count += 1
+                    if seen_count <= max_entries:
+                        name = entry.name
+                        rel = (prefix + "/" + name) if prefix else name
                         try:
-                            child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
-                            stack.append((child_fd, rel, True))
+                            st = entry.stat(follow_symlinks=False)
                         except OSError:
-                            pass
-                    elif is_file:
-                        results.append((rel, False))
-                if len(results) >= max_entries and any(True for _ in []):
-                    pass
+                            failed = True
+                            continue
+                        is_dir = stat.S_ISDIR(st.st_mode)
+                        is_file = stat.S_ISREG(st.st_mode)
+                        is_link = stat.S_ISLNK(st.st_mode)
+                        if is_link:
+                            results.append((rel, False))
+                        elif is_dir:
+                            results.append((rel, True))
+                            try:
+                                child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+                                stack.append((child_fd, rel, True))
+                            except OSError:
+                                failed = True
+                        elif is_file:
+                            results.append((rel, False))
+                    else:
+                        truncated = True
+                        # drain remaining entries in this directory without storing
+                        continue
             finally:
                 if owns:
                     try:
                         os.close(fd)
                     except OSError:
                         pass
-            if len(results) >= max_entries:
-                # check if more entries remain
-                truncated = True
-        # If stack still has items or scandir loop broke due to cap, truncated
+        if failed:
+            return results, "failed"
         if truncated:
             return results, "truncated"
         return results, "complete"
