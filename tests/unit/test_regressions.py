@@ -167,3 +167,14 @@ def test_implementation_identity_sensitive():
     a = implementation_digest_entries([("a.py", b"x")])
     b = implementation_digest_entries([("a.py", b"y")])
     assert a != b
+
+
+def test_closure_stable_and_sensitive():
+    entries = [("src/a.py", b"x"), ("pap/schemas/m.json", b"{}")]
+    deps = [("cryptography", "43.0.0", "sha256:abc")]
+    a = implementation_digest_entries(entries, deps)
+    b = implementation_digest_entries(entries, deps)
+    assert a == b
+    assert implementation_digest_entries([("src/a.py", b"y"), ("pap/schemas/m.json", b"{}")], deps) != a
+    assert implementation_digest_entries([("src/a.py", b"x"), ("pap/schemas/m.json", b"{ }")], deps) != a
+    assert implementation_digest_entries(entries, [("cryptography", "43.0.0", "sha256:def")]) != a

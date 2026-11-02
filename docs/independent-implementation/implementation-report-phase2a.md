@@ -33,6 +33,15 @@ The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTO
 - `implementationDigest` now derived from actual source closure.
 - Added CLI integration and regression tests.
 
+## Third corrective pass
+- Isolated claim parsing state per iteration.
+- Enforced aggregate `payloadFiles` limit.
+- Implemented checker closure including launcher, source files, runtime schemas, and dependency records.
+- Bounded trust-policy reads.
+- Guaranteed root FD closure.
+- Corrected directory-scan failure semantics.
+- Added regression tests for all findings.
+
 ## Known limitations
 - `inspect` and `explain` not implemented (Phase 2c).
 - Tier B signatures not implemented (Phase 2d).
