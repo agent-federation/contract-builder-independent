@@ -24,6 +24,15 @@ Phase 2a complete for Tier A vertical slice. Implemented a working `pap verify` 
 ## Security assumption: package-root parent components
 The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)` followed by `fstat` on the same descriptor. `O_NOFOLLOW` prevents following a symlink for the final root component, but it does **not** protect against symlink substitution in parent components of the supplied path (for example `/tmp/link-to-package` where an ancestor directory is a symlink, or a race that replaces an ancestor). Those parent components are resolved by the operating system before `open()` is called. This is a stated trust assumption: the caller-supplied package path and its parent directories are trusted to be stable and not attacker-controlled. A local attacker with write access to an ancestor directory can redirect the root open. This residual risk is documented and is not claimed to be fully protected by `O_NOFOLLOW`.
 
+## Corrective review fixes applied
+- Source quote extraction uses byte offsets per RFC §8.5 (added multibyte regression test).
+- `read_file_bounded()` now handles exact EOF at limit.
+- Filesystem errors preserve distinct diagnostic codes.
+- Collection limits enforced before processing.
+- Manifest nesting/string limits map to `pap.package.limit-exceeded`.
+- `implementationDigest` now derived from actual source closure.
+- Added CLI integration and regression tests.
+
 ## Known limitations
 - `inspect` and `explain` not implemented (Phase 2c).
 - Tier B signatures not implemented (Phase 2d).

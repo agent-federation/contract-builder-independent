@@ -37,7 +37,10 @@ def parse_manifest(raw: bytes, limits: dict) -> Tuple[Any, List[Diagnostic]]:
     try:
         obj = parse_strict(raw, json_nesting_limit=limits["jsonNesting"], json_string_limit=limits["jsonStringBytes"])
     except CanonicalError as exc:
-        raise ManifestError("pap.package.manifest-json", str(exc)) from exc
+        msg = str(exc)
+        if "limit" in msg or "exceeds" in msg:
+            raise ManifestError("pap.package.limit-exceeded", msg) from exc
+        raise ManifestError("pap.package.manifest-json", msg) from exc
 
     schema = load_schema()
     validator = jsonschema.Draft202012Validator(schema)

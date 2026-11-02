@@ -8,29 +8,31 @@ from typing import Iterator, List, Tuple
 
 
 class PathError(Exception):
-    pass
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 def validate_path_grammar(p: str) -> None:
     if not isinstance(p, str) or not p:
-        raise PathError("empty path")
+        raise PathError("pap.package.path-invalid", "empty path")
     if p.startswith("/") or p.endswith("/"):
-        raise PathError("invalid path boundaries")
+        raise PathError("pap.package.path-invalid", "invalid path boundaries")
     segments = p.split("/")
     if any(s == "" for s in segments):
-        raise PathError("empty segment")
+        raise PathError("pap.package.path-invalid", "empty segment")
     if len(segments) > 16:
-        raise PathError("too many segments")
+        raise PathError("pap.package.path-invalid", "too many segments")
     if len(p.encode("utf-8")) > 255:
-        raise PathError("path too long")
+        raise PathError("pap.package.path-invalid", "path too long")
     for seg in segments:
         if seg in (".", ".."):
-            raise PathError("dot segment")
+            raise PathError("pap.package.path-invalid", "dot segment")
         if len(seg.encode("utf-8")) > 255:
-            raise PathError("segment too long")
+            raise PathError("pap.package.path-invalid", "segment too long")
         if not all(c.isascii() and (c.isalnum() or c in "._-") for c in seg):
-            raise PathError("invalid path characters")
-    # ASCII-only already enforced by isascii above
+            raise PathError("pap.package.path-invalid", "invalid path characters")
 
 
 def case_fold_key(p: str) -> str:
@@ -38,28 +40,32 @@ def case_fold_key(p: str) -> str:
 
 
 def open_root(root_path: str) -> int:
-    # Trust assumption: caller has already validated root_path is a directory path string.
-    # We open with O_NOFOLLOW so a symlink root fails ELOOP rather than being followed.
     try:
         fd = os.open(root_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError as exc:
+        raise PathError("pap.package.not-found", f"package root not found: {exc}") from exc
+    except NotADirectoryError as exc:
+        raise PathError("pap.package.non-regular", f"package root is not a directory: {exc}") from exc
+    except PermissionError as exc:
+        raise PathError("pap.package.io", f"permission denied opening root: {exc}") from exc
     except OSError as exc:
-        raise PathError(f"cannot open package root: {exc}") from exc
+        if exc.errno in (20,):  # ENOTDIR
+            raise PathError("pap.package.non-regular", f"package root is not a directory: {exc}") from exc
+        raise PathError("pap.package.io", f"cannot open package root: {exc}") from exc
     try:
         st = os.fstat(fd)
     except OSError as exc:
         os.close(fd)
-        raise PathError(f"cannot stat package root: {exc}") from exc
+        raise PathError("pap.package.io", f"cannot stat package root: {exc}") from exc
     if not stat.S_ISDIR(st.st_mode):
         os.close(fd)
-        raise PathError("package root is not a directory")
+        if stat.S_ISLNK(st.st_mode):
+            raise PathError("pap.package.symlink", "package root is a symlink")
+        raise PathError("pap.package.non-regular", "package root is not a regular directory")
     return fd
 
 
 def open_relative(root_fd: int, rel_path: str) -> int:
-    """Open a validated relative path under root_fd without following symlinks.
-
-    Returns a file descriptor to the final regular file.
-    """
     validate_path_grammar(rel_path)
     segments = rel_path.split("/")
     cur_fd = root_fd
@@ -69,22 +75,34 @@ def open_relative(root_fd: int, rel_path: str) -> int:
             flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
             if i < len(segments) - 1:
                 flags |= os.O_DIRECTORY
-            fd = os.open(seg, flags, dir_fd=cur_fd)
+            try:
+                fd = os.open(seg, flags, dir_fd=cur_fd)
+            except FileNotFoundError as exc:
+                raise PathError("pap.package.declared-file-missing", f"missing path component {seg!r}: {exc}") from exc
+            except NotADirectoryError as exc:
+                raise PathError("pap.package.non-regular", f"not a directory: {seg!r}: {exc}") from exc
+            except PermissionError as exc:
+                raise PathError("pap.package.io", f"permission denied: {seg!r}: {exc}") from exc
+            except OSError as exc:
+                if exc.errno == 40:  # ELOOP
+                    raise PathError("pap.package.symlink", f"symlink encountered: {seg!r}: {exc}") from exc
+                raise PathError("pap.package.io", f"cannot open {seg!r}: {exc}") from exc
             opened_fds.append(fd)
             st = os.fstat(fd)
             if i < len(segments) - 1:
+                if stat.S_ISLNK(st.st_mode):
+                    raise PathError("pap.package.symlink", f"symlink directory: {seg!r}")
                 if not stat.S_ISDIR(st.st_mode):
-                    raise PathError("path component is not a directory")
+                    raise PathError("pap.package.non-regular", f"not a directory: {seg!r}")
             else:
+                if stat.S_ISLNK(st.st_mode):
+                    raise PathError("pap.package.symlink", f"symlink file: {seg!r}")
                 if not stat.S_ISREG(st.st_mode):
-                    raise PathError("declared path is not a regular file")
+                    raise PathError("pap.package.non-regular", f"not a regular file: {seg!r}")
             cur_fd = fd
         final_fd = opened_fds[-1]
-        # detach so caller owns it
         opened_fds.pop()
         return final_fd
-    except OSError as exc:
-        raise PathError(f"cannot open path {rel_path!r}: {exc}") from exc
     finally:
         for fd in opened_fds:
             try:
@@ -95,79 +113,98 @@ def open_relative(root_fd: int, rel_path: str) -> int:
 
 def read_file_bounded(fd: int, per_file_limit: int, total_counter: list[int], total_limit: int) -> bytes:
     st = os.fstat(fd)
+    if stat.S_ISLNK(st.st_mode):
+        raise PathError("pap.package.symlink", "file is a symlink")
     if not stat.S_ISREG(st.st_mode):
-        raise PathError("not a regular file")
-    # advisory size check
-    if st.st_size > per_file_limit:
-        raise PathError("file exceeds per-file limit")
+        raise PathError("pap.package.non-regular", "not a regular file")
     chunks = []
     read_total = 0
     while True:
         remaining_file = per_file_limit - read_total
         remaining_total = total_limit - total_counter[0]
+        if remaining_file <= 0:
+            # boundary: if EOF, finish; else limit exceeded
+            try:
+                probe = os.read(fd, 1)
+            except OSError as exc:
+                raise PathError("pap.package.io", f"read error: {exc}") from exc
+            if probe == b"":
+                break
+            # push back? os.read consumed one byte beyond limit; append and raise
+            raise PathError("pap.package.limit-exceeded", "per-file limit exceeded")
+        if remaining_total <= 0:
+            try:
+                probe = os.read(fd, 1)
+            except OSError as exc:
+                raise PathError("pap.package.io", f"read error: {exc}") from exc
+            if probe == b"":
+                break
+            raise PathError("pap.package.limit-exceeded", "total payload limit exceeded")
         to_read = min(65536, remaining_file, remaining_total)
-        if to_read <= 0:
-            # determine which limit
-            if read_total >= per_file_limit:
-                raise PathError("per-file limit exceeded")
-            raise PathError("total payload limit exceeded")
-        data = os.read(fd, to_read)
+        try:
+            data = os.read(fd, to_read)
+        except OSError as exc:
+            raise PathError("pap.package.io", f"read error: {exc}") from exc
         if not data:
             break
         chunks.append(data)
         read_total += len(data)
         total_counter[0] += len(data)
         if read_total > per_file_limit or total_counter[0] > total_limit:
-            raise PathError("payload limit exceeded")
+            raise PathError("pap.package.limit-exceeded", "payload limit exceeded")
     return b"".join(chunks)
 
 
-def scan_entries(root_fd: int, max_entries: int) -> List[Tuple[str, bool]]:
-    """Return (relative_path, is_dir) for entries under root, bounded.
-
-    Does not follow symlinks. Stops after max_entries.
-    """
+def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]], str]:
+    """Return (entries, status) where status is complete/truncated/failed."""
     results: List[Tuple[str, bool]] = []
-    # stack of (dir_fd_owned, prefix)
-    # We'll do iterative DFS using dir fds opened with O_NOFOLLOW.
-    stack = [(root_fd, "", False)]  # (fd, prefix, owns_fd)
-    # root already opened by caller; don't close it here
-    while stack and len(results) < max_entries:
-        fd, prefix, owns = stack.pop()
-        try:
-            for entry in os.scandir(fd):
-                if len(results) >= max_entries:
-                    break
-                name = entry.name
-                if prefix:
-                    rel = prefix + "/" + name
-                else:
-                    rel = name
-                try:
-                    st = entry.stat(follow_symlinks=False)
-                except OSError:
-                    continue
-                is_dir = stat.S_ISDIR(st.st_mode)
-                is_file = stat.S_ISREG(st.st_mode)
-                is_link = stat.S_ISLNK(st.st_mode)
-                if is_link:
-                    # record as file-like? Symlink is not a regular file; skip reading
-                    results.append((rel, False))
-                    continue
-                if is_dir:
-                    results.append((rel, True))
-                    # open dir fd
+    stack = []
+    try:
+        # open root children lazily; root fd provided by caller
+        stack.append((root_fd, "", False))
+        truncated = False
+        while stack and len(results) < max_entries:
+            fd, prefix, owns = stack.pop()
+            try:
+                for entry in os.scandir(fd):
+                    if len(results) >= max_entries:
+                        truncated = True
+                        break
+                    name = entry.name
+                    rel = (prefix + "/" + name) if prefix else name
                     try:
-                        child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
-                        stack.append((child_fd, rel, True))
+                        st = entry.stat(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    is_dir = stat.S_ISDIR(st.st_mode)
+                    is_file = stat.S_ISREG(st.st_mode)
+                    is_link = stat.S_ISLNK(st.st_mode)
+                    if is_link:
+                        results.append((rel, False))
+                        continue
+                    if is_dir:
+                        results.append((rel, True))
+                        try:
+                            child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
+                            stack.append((child_fd, rel, True))
+                        except OSError:
+                            pass
+                    elif is_file:
+                        results.append((rel, False))
+                if len(results) >= max_entries and any(True for _ in []):
+                    pass
+            finally:
+                if owns:
+                    try:
+                        os.close(fd)
                     except OSError:
                         pass
-                elif is_file:
-                    results.append((rel, False))
-        finally:
-            if owns:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-    return results
+            if len(results) >= max_entries:
+                # check if more entries remain
+                truncated = True
+        # If stack still has items or scandir loop broke due to cap, truncated
+        if truncated:
+            return results, "truncated"
+        return results, "complete"
+    except OSError:
+        return results, "failed"

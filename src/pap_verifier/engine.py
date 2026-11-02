@@ -149,8 +149,15 @@ class Verifier:
             claims_decl = manifest.get("claims", {}) or {}
             for v in claims_decl.values():
                 all_paths.append(v["path"])
+            _artifacts = manifest.get("artifacts", [])
+            if len(_artifacts) > limits["payloadFiles"]:
+                limit_hit = True
+                diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="artifacts", message="artifact declaration count exceeds limit"))
+                for a in _artifacts:
+                    artifacts_info.append({"id": a["id"], "path": a["path"], "declared": a["digest"], "computed": None, "bytes": None, "raw": None, "declared_bytes": a["bytes"]})
+                _artifacts = []
             # artifacts
-            for a in manifest.get("artifacts", []):
+            for a in _artifacts:
                 path = a["path"]
                 declared = a["digest"]
                 computed = None
@@ -161,13 +168,11 @@ class Verifier:
                     os.close(fd)
                     fd = None
                 except Exception as exc:
-                    # missing or limit
+                    code = getattr(exc, "code", "pap.package.io")
                     msg = str(exc)
-                    if "limit" in msg:
+                    if code == "pap.package.limit-exceeded":
                         limit_hit = True
-                        diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope=path, message=msg))
-                    else:
-                        diags.append(Diagnostic(code="pap.package.declared-file-missing", severity="error", scope=path, message=msg))
+                    diags.append(Diagnostic(code=code, severity="error", scope=path, message=msg))
                     computed = None
                 if raw is not None:
                     if len(raw) != a["bytes"]:
@@ -177,8 +182,15 @@ class Verifier:
                         diags.append(Diagnostic(code="pap.integrity.artifact-mismatch", severity="error", scope=a["id"], message="digest mismatch"))
                 artifacts_info.append({"id": a["id"], "path": path, "declared": declared, "computed": computed, "bytes": len(raw) if raw is not None else None, "raw": raw, "declared_bytes": a["bytes"]})
 
+            _sources = manifest.get("sources", [])
+            if len(_sources) > limits["payloadFiles"]:
+                limit_hit = True
+                diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="sources", message="source declaration count exceeds limit"))
+                for s in _sources:
+                    sources_info.append({"id": s["id"], "path": s.get("path"), "declared": s["digest"], "computed": None, "raw": None})
+                _sources = []
             # sources embedded
-            for s in manifest.get("sources", []):
+            for s in _sources:
                 sid = s["id"]
                 declared = s["digest"]
                 computed = None
@@ -190,21 +202,27 @@ class Verifier:
                         raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
                         os.close(fd)
                     except Exception as exc:
+                        code = getattr(exc, "code", "pap.package.io")
                         msg = str(exc)
-                        if "limit" in msg:
+                        if code == "pap.package.limit-exceeded":
                             limit_hit = True
-                            diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope=path, message=msg))
-                        else:
-                            diags.append(Diagnostic(code="pap.package.declared-file-missing", severity="error", scope=path, message=msg))
+                        diags.append(Diagnostic(code=code, severity="error", scope=path, message=msg))
                     if raw is not None:
                         computed = H("pap.source.raw.v1", raw)
                         if computed != declared:
                             diags.append(Diagnostic(code="pap.integrity.source-mismatch", severity="error", scope=sid, message="digest mismatch"))
                 sources_info.append({"id": sid, "path": path, "declared": declared, "computed": computed, "raw": raw})
 
+            _inputs = manifest.get("inputs", [])
+            if len(_inputs) > limits["payloadFiles"]:
+                limit_hit = True
+                diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="inputs", message="input declaration count exceeds limit"))
+                for inp in _inputs:
+                    inputs_info.append({"id": inp["id"], "path": inp["path"], "declared": inp["digest"], "computed": None, "raw": None})
+                _inputs = []
             # inputs
             input_records = []
-            for inp in manifest.get("inputs", []):
+            for inp in _inputs:
                 path = inp["path"]
                 declared = inp["digest"]
                 computed = None
@@ -214,12 +232,11 @@ class Verifier:
                     raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
                     os.close(fd)
                 except Exception as exc:
+                    code = getattr(exc, "code", "pap.package.io")
                     msg = str(exc)
-                    if "limit" in msg:
+                    if code == "pap.package.limit-exceeded":
                         limit_hit = True
-                        diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope=path, message=msg))
-                    else:
-                        diags.append(Diagnostic(code="pap.package.declared-file-missing", severity="error", scope=path, message=msg))
+                    diags.append(Diagnostic(code=code, severity="error", scope=path, message=msg))
                 if raw is not None:
                     normalized = normalize_input_bytes(raw, inp["normalization"])
                     computed = digest_input_file(path, normalized)
@@ -240,6 +257,10 @@ class Verifier:
 
             # claims
             claims_decl = manifest.get("claims", {}) or {}
+            if len(claims_decl) > limits["claimsFiles"]:
+                limit_hit = True
+                diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="claims", message="claims file count exceeds limit"))
+                claims_decl = {}
             # validate each declared claim file
             claim_raws = {}
             for kind, ref in claims_decl.items():
@@ -252,12 +273,11 @@ class Verifier:
                     raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
                     os.close(fd)
                 except Exception as exc:
+                    code = getattr(exc, "code", "pap.package.io")
                     msg = str(exc)
-                    if "limit" in msg:
+                    if code == "pap.package.limit-exceeded":
                         limit_hit = True
-                        diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope=path, message=msg))
-                    else:
-                        diags.append(Diagnostic(code="pap.package.declared-file-missing", severity="error", scope=path, message=msg))
+                    diags.append(Diagnostic(code=code, severity="error", scope=path, message=msg))
                 if raw is not None:
                     computed = H("pap.claims.v1", raw)
                     if computed != declared:
@@ -323,9 +343,15 @@ class Verifier:
 
             # undeclared files scan (warnings)
             try:
-                entries = scan_entries(root_fd, limits["payloadFiles"])
-            except Exception:
+                entries, scan_status = scan_entries(root_fd, limits["payloadFiles"])
+                if scan_status == "truncated":
+                    limit_hit = True
+                    diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="package", message="directory scan truncated by payloadFiles limit"))
+                elif scan_status == "failed":
+                    diags.append(Diagnostic(code="pap.package.io", severity="error", scope="package", message="directory scan failed"))
+            except Exception as exc:
                 entries = []
+                diags.append(Diagnostic(code="pap.package.io", severity="error", scope="package", message=str(exc)))
             declared_paths_cf = set(case_fold_key(p) for p in all_paths)
             for rel, is_dir in entries:
                 if is_dir:
@@ -499,6 +525,10 @@ class Verifier:
                     outcome = "NOT_EVALUATED"
             else:
                 bindings = prov.get("bindings", [])
+                if len(bindings) > limits["provenanceBindings"]:
+                    limit_hit = True
+                    diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="provenance", message="provenance binding count exceeds limit"))
+                    bindings = []
                 bindings_count = len(bindings)
                 declared_source_map = {s["id"]: s for s in sources_info}
                 for b in bindings:
@@ -570,6 +600,12 @@ class Verifier:
                 entities = rel_claim.get("entities", [])
                 relations = rel_claim.get("relations", [])
                 edges = rel_claim.get("edges", [])
+                if len(entities) > limits["relationEntities"] or len(edges) > limits["relationEdges"]:
+                    limit_hit = True
+                    diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="relations", message="relation collection exceeds limit"))
+                    entities = []
+                    relations = []
+                    edges = []
                 entities_count = len(entities)
                 edges_count = len(edges)
                 entity_map = {e["id"]: e for e in entities}
@@ -738,13 +774,20 @@ class Verifier:
         # discover envelopes
         env_paths = []
         try:
-            for rel, is_dir in scan_entries(root_fd, limits["signatureEnvelopes"] + 1):
-                if is_dir:
-                    continue
-                if rel.startswith("signatures/") and rel.endswith(".dsse.json"):
-                    env_paths.append(rel)
-        except Exception:
-            pass
+            entries, scan_status = scan_entries(root_fd, limits["signatureEnvelopes"] + 1)
+            if scan_status == "truncated":
+                # more envelopes than limit: read none
+                limit_hit = True
+                env_paths = []
+                diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="signatures", message="signature envelope count exceeds limit"))
+            else:
+                for rel, is_dir in entries:
+                    if is_dir:
+                        continue
+                    if rel.startswith("signatures/") and rel.endswith(".dsse.json"):
+                        env_paths.append(rel)
+        except Exception as exc:
+            diags.append(Diagnostic(code="pap.package.io", severity="error", scope="signatures", message=str(exc)))
         env_paths = sorted(set(env_paths))
         if env_paths:
             signature_validity = "NOT_EVALUATED"
