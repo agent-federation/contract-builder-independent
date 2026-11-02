@@ -2003,8 +2003,8 @@
     },
     {
       "path": "pap/fixtures/pap-v0.1/README.md",
-      "size": 2203,
-      "sha256": "38317887ad9ca7961629c61c36744fa755582939ac011fb4063f3e1f4c781f7e"
+      "size": 3002,
+      "sha256": "c75db5c1a65b9537e13db099770d44afa5f8045d674b019ef4b194e376920814"
     },
     {
       "path": "pap/fixtures/pap-v0.1/base/artifacts/ACME-SUPPLIER.draft.md",
