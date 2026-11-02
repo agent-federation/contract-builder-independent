@@ -75,10 +75,14 @@ class Verifier:
             manifest = None
             manifest_error = None
             manifest_identity = None
+            mfd = None
             try:
-                mfd = open_relative(root_fd, "assurance-package.json")
-                manifest_raw = read_file_bounded(mfd, limits["manifestBytes"], [0], limits["manifestBytes"])
-                os.close(mfd)
+                try:
+                    mfd = open_relative(root_fd, "assurance-package.json")
+                    manifest_raw = read_file_bounded(mfd, limits["manifestBytes"], [0], limits["manifestBytes"])
+                finally:
+                    if mfd is not None:
+                        os.close(mfd)
             except Exception as exc:
                 manifest_error = ("pap.package.io", str(exc))
             if manifest_raw is not None:
@@ -181,11 +185,14 @@ class Verifier:
                     declared = a["digest"]
                     computed = None
                     raw = None
+                    fd = None
                     try:
-                        fd = open_relative(root_fd, path)
-                        raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
-                        os.close(fd)
-                        fd = None
+                        try:
+                            fd = open_relative(root_fd, path)
+                            raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
+                        finally:
+                            if fd is not None:
+                                os.close(fd)
                     except Exception as exc:
                         code = getattr(exc, "code", "pap.package.io")
                         msg = str(exc)
@@ -219,10 +226,14 @@ class Verifier:
                     raw = None
                     path = s.get("path")
                     if path:
+                        fd = None
                         try:
-                            fd = open_relative(root_fd, path)
-                            raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
-                            os.close(fd)
+                            try:
+                                fd = open_relative(root_fd, path)
+                                raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
+                            finally:
+                                if fd is not None:
+                                    os.close(fd)
                         except Exception as exc:
                             code = getattr(exc, "code", "pap.package.io")
                             msg = str(exc)
@@ -252,10 +263,14 @@ class Verifier:
                     declared = inp["digest"]
                     computed = None
                     raw = None
+                    fd = None
                     try:
-                        fd = open_relative(root_fd, path)
-                        raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
-                        os.close(fd)
+                        try:
+                            fd = open_relative(root_fd, path)
+                            raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
+                        finally:
+                            if fd is not None:
+                                os.close(fd)
                     except Exception as exc:
                         code = getattr(exc, "code", "pap.package.io")
                         msg = str(exc)
@@ -294,10 +309,14 @@ class Verifier:
                     declared = ref["digest"]
                     raw = None
                     computed = None
+                    fd = None
                     try:
-                        fd = open_relative(root_fd, path)
-                        raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
-                        os.close(fd)
+                        try:
+                            fd = open_relative(root_fd, path)
+                            raw = read_file_bounded(fd, limits["fileBytes"], total_counter, limits["totalPayloadBytes"])
+                        finally:
+                            if fd is not None:
+                                os.close(fd)
                     except Exception as exc:
                         code = getattr(exc, "code", "pap.package.io")
                         msg = str(exc)
