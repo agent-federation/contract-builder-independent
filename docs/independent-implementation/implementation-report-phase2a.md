@@ -42,6 +42,13 @@ The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTO
 - Corrected directory-scan failure semantics.
 - Added regression tests for all findings.
 
+## Fourth corrective pass
+- Every payload/manifest/claim FD now uses try/finally.
+- Signature discovery is independent of payloadFiles and counts only envelopes.
+- Checker closure includes launcher, source files, runtime schemas, and direct/transitive dependencies.
+- Separate directory-entry safety limit added.
+- Added FD, signature discovery, and closure regression tests.
+
 ## Known limitations
 - `inspect` and `explain` not implemented (Phase 2c).
 - Tier B signatures not implemented (Phase 2d).

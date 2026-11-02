@@ -100,7 +100,7 @@ def test_partial_scan():
         with open(os.path.join(d, f"f{i}.txt"), "w") as f:
             f.write("x")
     rootfd = open_root(d)
-    entries, status = scan_entries(rootfd, 2)
+    entries, status, reason = scan_entries(rootfd, 2)
     assert status == "truncated"
     os.close(rootfd)
 
@@ -111,13 +111,13 @@ def test_scan_exact_limit_not_truncated():
         with open(os.path.join(d, f"f{i}.txt"), "w") as f:
             f.write("x")
     rootfd = open_root(d)
-    entries, status = scan_entries(rootfd, 3)
+    entries, status, reason = scan_entries(rootfd, 3)
     assert status == "complete"
     assert len(entries) == 3
     os.close(rootfd)
 
     rootfd2 = open_root(d)
-    entries2, status2 = scan_entries(rootfd2, 4)
+    entries2, status2, reason2 = scan_entries(rootfd2, 4)
     assert status2 == "complete"
     os.close(rootfd2)
 
@@ -132,7 +132,7 @@ def test_scan_stat_failure_reported():
         f.write("x")
     os.chmod(sub, 0o000)
     rootfd = open_root(d)
-    entries, status = scan_entries(rootfd, 100)
+    entries, status, reason = scan_entries(rootfd, 100)
     os.chmod(sub, 0o755)
     os.close(rootfd)
     assert status == "failed"
@@ -178,3 +178,46 @@ def test_closure_stable_and_sensitive():
     assert implementation_digest_entries([("src/a.py", b"y"), ("pap/schemas/m.json", b"{}")], deps) != a
     assert implementation_digest_entries([("src/a.py", b"x"), ("pap/schemas/m.json", b"{ }")], deps) != a
     assert implementation_digest_entries(entries, [("cryptography", "43.0.0", "sha256:def")]) != a
+
+
+from pap_verifier.pathing import discover_signature_envelopes
+
+
+def test_signature_discovery_exact_and_overflow():
+    d = tempfile.mkdtemp()
+    sigdir = os.path.join(d, "signatures")
+    os.makedirs(sigdir)
+    for i in range(32):
+        with open(os.path.join(sigdir, f"e{i}.dsse.json"), "w") as f:
+            f.write("{}")
+    rootfd = open_root(d)
+    paths, status, reason = discover_signature_envelopes(rootfd, 32)
+    assert status == "complete"
+    assert len(paths) == 32
+    os.close(rootfd)
+
+    d2 = tempfile.mkdtemp()
+    sigdir2 = os.path.join(d2, "signatures")
+    os.makedirs(sigdir2)
+    for i in range(33):
+        with open(os.path.join(sigdir2, f"e{i}.dsse.json"), "w") as f:
+            f.write("{}")
+    rootfd2 = open_root(d2)
+    paths2, status2, reason2 = discover_signature_envelopes(rootfd2, 32)
+    assert status2 == "truncated"
+    assert reason2 == "signatureEnvelopes"
+    assert paths2 == []
+    os.close(rootfd2)
+
+
+def test_signature_discovery_ignores_ordinary_entries():
+    d = tempfile.mkdtemp()
+    # many ordinary files, zero signatures
+    for i in range(100):
+        with open(os.path.join(d, f"f{i}.txt"), "w") as f:
+            f.write("x")
+    rootfd = open_root(d)
+    paths, status, reason = discover_signature_envelopes(rootfd, 32)
+    assert status == "complete"
+    assert paths == []
+    os.close(rootfd)

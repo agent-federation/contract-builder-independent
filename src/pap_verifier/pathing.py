@@ -153,12 +153,14 @@ def read_file_bounded(fd: int, per_file_limit: int, total_counter: list[int], to
     return b"".join(chunks)
 
 
-def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]], str]:
+def scan_entries(root_fd: int, max_results: int, max_dir_entries: int = 100000) -> tuple[list[tuple[str, bool]], str, str]:
+    """Return (entries, status, reason)."""
     results: list[tuple[str, bool]] = []
     stack = [(root_fd, "", False)]
     failed = False
     truncated = False
-    seen_count = 0
+    reason = ""
+    total_seen = 0
     try:
         while stack:
             fd, prefix, owns = stack.pop()
@@ -174,8 +176,12 @@ def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]]
                 continue
             try:
                 for entry in it:
-                    seen_count += 1
-                    if seen_count <= max_entries:
+                    total_seen += 1
+                    if total_seen > max_dir_entries:
+                        truncated = True
+                        reason = "directoryEntries"
+                        continue
+                    if len(results) < max_results:
                         name = entry.name
                         rel = (prefix + "/" + name) if prefix else name
                         try:
@@ -199,7 +205,8 @@ def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]]
                             results.append((rel, False))
                     else:
                         truncated = True
-                        # drain remaining entries in this directory without storing
+                        if not reason:
+                            reason = "results"
                         continue
             finally:
                 if owns:
@@ -208,9 +215,55 @@ def scan_entries(root_fd: int, max_entries: int) -> tuple[list[tuple[str, bool]]
                     except OSError:
                         pass
         if failed:
-            return results, "failed"
+            return results, "failed", "io"
         if truncated:
-            return results, "truncated"
-        return results, "complete"
+            return results, "truncated", reason or "results"
+        return results, "complete", ""
     except OSError:
-        return results, "failed"
+        return results, "failed", "io"
+
+
+def discover_signature_envelopes(root_fd: int, limit: int) -> tuple[list[str], str, str]:
+    """Discover only *.dsse.json directly under signatures/."""
+    paths: list[str] = []
+    sig_fd = None
+    try:
+        try:
+            sig_fd = os.open("signatures", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=root_fd)
+        except FileNotFoundError:
+            return [], "complete", ""
+        except OSError:
+            return [], "failed", "io"
+        truncated = False
+        count = 0
+        try:
+            for entry in os.scandir(sig_fd):
+                try:
+                    st = entry.stat(follow_symlinks=False)
+                except OSError:
+                    return [], "failed", "io"
+                if not stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+                    continue
+                name = entry.name
+                if not (name.endswith(".dsse.json") and len(name) > len(".dsse.json")):
+                    continue
+                # basic name grammar
+                stem = name[: -len(".dsse.json")]
+                if not stem or any(c not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-" for c in stem):
+                    continue
+                count += 1
+                if count <= limit:
+                    paths.append("signatures/" + name)
+                else:
+                    truncated = True
+        except OSError:
+            return [], "failed", "io"
+        if truncated:
+            return [], "truncated", "signatureEnvelopes"
+        return sorted(paths), "complete", ""
+    finally:
+        if sig_fd is not None:
+            try:
+                os.close(sig_fd)
+            except OSError:
+                pass

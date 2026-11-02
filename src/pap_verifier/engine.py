@@ -16,7 +16,7 @@ from .digest import H, frame_record, normalize_input_bytes, digest_input_file, d
 from .identities import checker_identity, implementation_digest
 from .limits import DEFAULTS, effective_limits
 from .manifest import parse_manifest, ManifestError, SCHEMA_PATH as MANIFEST_SCHEMA_PATH
-from .pathing import open_root, open_relative, read_file_bounded, validate_path_grammar, scan_entries, case_fold_key
+from .pathing import open_root, open_relative, read_file_bounded, validate_path_grammar, scan_entries, discover_signature_envelopes, case_fold_key
 from .trust_policy import parse_policy, PolicyError, policy_state, parse_rfc3339
 
 
@@ -370,7 +370,7 @@ class Verifier:
 
                 # undeclared files scan (warnings)
                 try:
-                    entries, scan_status = scan_entries(root_fd, limits["payloadFiles"])
+                    entries, scan_status, scan_reason = scan_entries(root_fd, limits["payloadFiles"], limits.get("directoryEntries", 100000))
                     if scan_status == "truncated":
                         limit_hit = True
                         scan_incomplete = True
@@ -805,21 +805,18 @@ class Verifier:
             # discover envelopes
             env_paths = []
             try:
-                entries, scan_status = scan_entries(root_fd, limits["signatureEnvelopes"] + 1)
+                env_paths, scan_status, scan_reason = discover_signature_envelopes(root_fd, limits["signatureEnvelopes"])
                 if scan_status == "truncated":
-                    # more envelopes than limit: read none
                     limit_hit = True
                     scan_incomplete = True
                     env_paths = []
-                    diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="signatures", message="signature envelope count exceeds limit"))
-                else:
-                    for rel, is_dir in entries:
-                        if is_dir:
-                            continue
-                        if rel.startswith("signatures/") and rel.endswith(".dsse.json"):
-                            env_paths.append(rel)
+                    diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="signatureEnvelopes", message="signature envelope count exceeds limit"))
+                elif scan_status == "failed":
+                    scan_incomplete = True
+                    diags.append(Diagnostic(code="pap.package.io", severity="warning", scope="signatures", message="signature discovery failed"))
             except Exception as exc:
-                diags.append(Diagnostic(code="pap.package.io", severity="error", scope="signatures", message=str(exc)))
+                scan_incomplete = True
+                diags.append(Diagnostic(code="pap.package.io", severity="warning", scope="signatures", message=str(exc)))
             env_paths = sorted(set(env_paths))
             if env_paths:
                 signature_validity = "NOT_EVALUATED"
