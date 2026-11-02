@@ -41,3 +41,24 @@ clarifications and conformance examples.
 ## Integrity
 
 File-level SHA-256 checksums are provided in `SHA256SUMS`.
+
+## Local adaptation history
+
+The corpus README at `pap/fixtures/pap-v0.1/README.md` was adapted in this
+repository after the source snapshot was imported. The adaptation is recorded
+in these commits:
+
+- `b4d5851` (chore: fixed README): replaced instructions tied to the original
+  TypeScript conformance harness with language-neutral guidance for independent
+  implementations. The harness-specific command and implementation details
+  were removed; the README now states that each independent implementation
+  supplies its own test harness.
+- `f34351b` (chore: fixed README): changed the `cases.json` description from a
+  reference to the original TypeScript test consumer to a language-neutral
+  description of the case index and expected outcomes.
+
+These commits changed only the corpus README. They did not modify the normative
+RFC, schemas, fixture package contents, or expected case outcomes. The adapted
+README is included in the snapshot manifest by its current byte size and SHA-256
+checksum. This local documentation adaptation is not a change to PAP normative
+requirements.
