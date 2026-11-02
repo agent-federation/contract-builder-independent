@@ -12,8 +12,8 @@ is a complete package copy; nothing is generated or mutated at test time.
 - `signatures/` — shared DSSE envelopes. The keys are test fixtures; no private
   key is committed. `trusted.dsse.json` and `unknown.dsse.json` are signed over
   the base canonical manifest; `invalid.dsse.json` has one corrupted signature.
-- `cases.json` — the case index consumed by
-  `pap/tests/conformance.test.ts`.
+- `cases.json` — the machine-readable index of conformance cases
+  and their expected outcomes.
 
 ## Using the conformance corpus
 
