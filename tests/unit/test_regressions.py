@@ -269,10 +269,10 @@ def test_fd_closure_on_bounded_read_exception():
     engine.read_file_bounded = fake_read
     try:
         v = engine.Verifier()
-        try:
-            v.verify(tmp, None, "2026-11-02T00:00:00Z")
-        except Exception:
-            pass
+        report = v.verify(tmp, None, "2026-11-02T00:00:00Z")
+        assert calls["n"] >= 2, "injected bounded-read failure was not reached"
+        assert len(created_fds) >= 2, "manifest and payload descriptors were not both opened"
+        assert any(d.get("code") == "pap.package.limit-exceeded" for d in report.get("diagnostics", [])), "bounded-read failure was not reported"
         assert created_fds, "no descriptor was opened"
         for fd in created_fds:
             try:
