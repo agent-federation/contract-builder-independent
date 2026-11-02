@@ -273,6 +273,13 @@ def test_fd_closure_on_bounded_read_exception():
             v.verify(tmp, None, "2026-11-02T00:00:00Z")
         except Exception:
             pass
+        assert created_fds, "no descriptor was opened"
+        for fd in created_fds:
+            try:
+                os.fstat(fd)
+                assert False, "descriptor was not closed by verifier"
+            except OSError:
+                pass
     finally:
         engine.open_relative = orig_open
         engine.read_file_bounded = orig_read
@@ -281,14 +288,6 @@ def test_fd_closure_on_bounded_read_exception():
                 os.close(fd)
             except OSError:
                 pass
-
-    assert created_fds, "no descriptor was opened"
-    for fd in created_fds[1:]:
-        try:
-            os.fstat(fd)
-            assert False, "payload descriptor was not closed"
-        except OSError:
-            pass
 
 
 def test_signature_discovery_integration():
