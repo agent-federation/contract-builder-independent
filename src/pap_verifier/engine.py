@@ -393,7 +393,7 @@ class Verifier:
                     if scan_status == "truncated":
                         limit_hit = True
                         scan_incomplete = True
-                        diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="package", message="directory scan truncated by payloadFiles limit"))
+                        diags.append(Diagnostic(code="pap.package.limit-exceeded", severity="error", scope="directoryEntries", message=f"directory scan truncated by {scan_reason or 'directoryEntries'} limit"))
                     elif scan_status == "failed":
                         scan_incomplete = True
                         diags.append(Diagnostic(code="pap.package.io", severity="warning", scope="package", message="directory scan failed"))

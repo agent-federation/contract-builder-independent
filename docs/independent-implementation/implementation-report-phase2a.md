@@ -19,7 +19,7 @@ Phase 2a complete for Tier A vertical slice. Implemented a working `pap verify` 
 - F01: PASS, coverage.full=true, packageIdentity matches E.1.
 - F02: FAIL, coverage.full=true.
 - F27: INCOMPLETE, coverage.full=false.
-- Unit tests: 15 passing (canonical, pathing, engine).
+- Superseded by targeted pytest suite result above.
 
 ## Security assumption: package-root parent components
 The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)` followed by `fstat` on the same descriptor. `O_NOFOLLOW` prevents following a symlink for the final root component, but it does **not** protect against symlink substitution in parent components of the supplied path (for example `/tmp/link-to-package` where an ancestor directory is a symlink, or a race that replaces an ancestor). Those parent components are resolved by the operating system before `open()` is called. This is a stated trust assumption: the caller-supplied package path and its parent directories are trusted to be stable and not attacker-controlled. A local attacker with write access to an ancestor directory can redirect the root open. This residual risk is documented and is not claimed to be fully protected by `O_NOFOLLOW`.
@@ -51,6 +51,11 @@ The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTO
 
 ## Dependency-integrity ambiguity
 RFC §5.2 requires dependency records with name, version and integrity, but does not specify how a Python implementation obtains a dependency integrity value. The current implementation uses a deterministic SHA-256 over the installed distribution METADATA as a stand-in. This is not a normative registry integrity record and must not be presented as one. A normative resolution (for example, a committed lockfile plus a defined local integrity algorithm) is required before claiming conformance for this aspect.
+
+## Test status
+- Targeted pytest suite: 39 tests passing (`PYTHONPATH=src .../python -m pytest -q`, exit code 0).
+- This is a targeted Tier A vertical-slice suite, not the full F01–F61 conformance run.
+- Tier A vertical-slice implementation work is complete; Phase 2a acceptance remains pending owner review.
 
 ## Known limitations
 - `inspect` and `explain` not implemented (Phase 2c).

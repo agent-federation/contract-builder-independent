@@ -253,12 +253,8 @@ def test_fd_closure_on_bounded_read_exception():
     orig_read = engine.read_file_bounded
 
     def fake_open(root_fd, rel):
-        fd = os.open(os.path.join(tmp, "dummy.txt"), os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o666) if False else None
-        # return a real fd from a temp file
-        t = tempfile.NamedTemporaryFile(delete=False)
-        fd = t.fileno()
+        fd = os.open(os.path.join(tmp, "fd-target.txt"), os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o666)
         created_fds.append(fd)
-        t.close()
         return fd
 
     calls = {"n": 0}
@@ -280,11 +276,17 @@ def test_fd_closure_on_bounded_read_exception():
     finally:
         engine.open_relative = orig_open
         engine.read_file_bounded = orig_read
+        for fd in created_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
-    for fd in created_fds:
+    assert created_fds, "no descriptor was opened"
+    for fd in created_fds[1:]:
         try:
             os.fstat(fd)
-            assert False, "descriptor was not closed"
+            assert False, "payload descriptor was not closed"
         except OSError:
             pass
 
@@ -330,6 +332,8 @@ def test_signature_discovery_integration():
         json.dump(manifest2, f)
     report2 = run_verify(d2, None, "2026-11-02T00:00:00Z")
     assert not any(dg["scope"] == "signatureEnvelopes" for dg in report2["diagnostics"])
+    assert len(report2["dimensions"]["signature"]["signatures"]) == 32
+    assert all(e["validity"] == "NOT_EVALUATED" for e in report2["dimensions"]["signature"]["signatures"])
 
     # 33 envelopes
     d3 = tempfile.mkdtemp()
