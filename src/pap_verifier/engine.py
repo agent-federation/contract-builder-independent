@@ -389,7 +389,7 @@ class Verifier:
 
                 # undeclared files scan (warnings)
                 try:
-                    entries, scan_status, scan_reason = scan_entries(root_fd, limits["payloadFiles"], limits.get("directoryEntries", 100000))
+                    entries, scan_status, scan_reason = scan_entries(root_fd, limits.get("directoryEntries", 100000), limits.get("directoryEntries", 100000))
                     if scan_status == "truncated":
                         limit_hit = True
                         scan_incomplete = True
@@ -841,6 +841,8 @@ class Verifier:
                 signature_validity = "NOT_EVALUATED"
                 for ep in env_paths:
                     sig_entries.append({"path": ep, "validity": "NOT_EVALUATED", "signerIdentity": "NOT_EVALUATED", "policyDecision": "NOT_EVALUATED"})
+                    diags.append(Diagnostic(code="pap.signature.unsupported-format", severity="warning", scope=ep, message="signature adapter not implemented in Tier A"))
+                limitations.append({"code": "pap.signature.unsupported-format", "detail": "signature envelopes present but Tier A does not evaluate them"})
             if limit_hit and env_paths:
                 signature_validity = "NOT_EVALUATED"
             # human review
@@ -1185,7 +1187,7 @@ class Verifier:
             }
             if producer_claims is not None:
                 report["producerClaims"] = producer_claims
-            _eff = {k: limits[k] for k in limits if limits[k] != DEFAULTS.get(k)}
+            _eff = {k: limits[k] for k in limits if k != "directoryEntries" and limits[k] != DEFAULTS.get(k)}
             if _eff:
                 report["effectiveLimits"] = _eff
 

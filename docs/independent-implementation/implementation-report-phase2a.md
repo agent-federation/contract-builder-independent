@@ -49,6 +49,9 @@ The initial package root is opened with `os.open(root_path, O_RDONLY | O_DIRECTO
 - Separate directory-entry safety limit added.
 - Added FD, signature discovery, and closure regression tests.
 
+## Dependency-integrity ambiguity
+RFC §5.2 requires dependency records with name, version and integrity, but does not specify how a Python implementation obtains a dependency integrity value. The current implementation uses a deterministic SHA-256 over the installed distribution METADATA as a stand-in. This is not a normative registry integrity record and must not be presented as one. A normative resolution (for example, a committed lockfile plus a defined local integrity algorithm) is required before claiming conformance for this aspect.
+
 ## Known limitations
 - `inspect` and `explain` not implemented (Phase 2c).
 - Tier B signatures not implemented (Phase 2d).

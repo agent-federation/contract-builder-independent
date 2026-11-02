@@ -17,6 +17,7 @@ DEFAULTS = {
     "relationEntities": 100000,
     "relationEdges": 1000000,
     "signatureEnvelopes": 32,
+    "directoryEntries": 100000,
 }
 
 LIMIT_NAMES = list(DEFAULTS.keys())

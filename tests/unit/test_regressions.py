@@ -221,3 +221,193 @@ def test_signature_discovery_ignores_ordinary_entries():
     assert status == "complete"
     assert paths == []
     os.close(rootfd)
+
+
+import json as _json
+
+
+def test_fd_closure_on_bounded_read_exception():
+    import os, tempfile
+    from pap_verifier import engine
+    from pap_verifier.pathing import PathError
+
+    tmp = tempfile.mkdtemp()
+    os.makedirs(os.path.join(tmp, "artifacts"), exist_ok=True)
+    os.makedirs(os.path.join(tmp, "sources"), exist_ok=True)
+    os.makedirs(os.path.join(tmp, "claims"), exist_ok=True)
+    with open(os.path.join(tmp, "artifacts", "a.txt"), "wb") as f:
+        f.write(b"artifact")
+    with open(os.path.join(tmp, "sources", "s.txt"), "wb") as f:
+        f.write(b"source")
+    manifest = {
+        "papVersion": "0.1",
+        "package": {"id": "urn:test:fd"},
+        "artifacts": [{"id": "a", "path": "artifacts/a.txt", "mediaType": "text/plain", "bytes": 8, "digest": "sha256:" + "0" * 64}],
+        "sources": [{"id": "S", "path": "sources/s.txt", "mediaType": "text/plain", "digest": "sha256:" + "0" * 64}],
+        "checkSpecs": [{"id": "pap.check.digest-integrity/1", "version": "1", "required": True}],
+    }
+    manifest_bytes = _json.dumps(manifest).encode()
+    created_fds = []
+
+    orig_open = engine.open_relative
+    orig_read = engine.read_file_bounded
+
+    def fake_open(root_fd, rel):
+        fd = os.open(os.path.join(tmp, "dummy.txt"), os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o666) if False else None
+        # return a real fd from a temp file
+        t = tempfile.NamedTemporaryFile(delete=False)
+        fd = t.fileno()
+        created_fds.append(fd)
+        t.close()
+        return fd
+
+    calls = {"n": 0}
+
+    def fake_read(fd, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return manifest_bytes
+        raise PathError("pap.package.limit-exceeded", "boom")
+
+    engine.open_relative = fake_open
+    engine.read_file_bounded = fake_read
+    try:
+        v = engine.Verifier()
+        try:
+            v.verify(tmp, None, "2026-11-02T00:00:00Z")
+        except Exception:
+            pass
+    finally:
+        engine.open_relative = orig_open
+        engine.read_file_bounded = orig_read
+
+    for fd in created_fds:
+        try:
+            os.fstat(fd)
+            assert False, "descriptor was not closed"
+        except OSError:
+            pass
+
+
+def test_signature_discovery_integration():
+    import os, tempfile, json
+    from pap_verifier.digest import H
+    from pap_verifier.engine import run_verify
+
+    # 100 ordinary files, no signatures
+    d = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d, "artifacts"))
+    ab = b"artifact"
+    with open(os.path.join(d, "artifacts", "a.txt"), "wb") as f:
+        f.write(ab)
+    for i in range(100):
+        with open(os.path.join(d, f"ordinary{i}.txt"), "w") as f:
+            f.write("x")
+    manifest = {
+        "papVersion": "0.1",
+        "package": {"id": "urn:test:sigdiscovery"},
+        "artifacts": [{"id": "a", "path": "artifacts/a.txt", "mediaType": "text/plain", "bytes": len(ab), "digest": H("pap.artifact.v1", ab)}],
+        "checkSpecs": [{"id": "pap.check.digest-integrity/1", "version": "1", "required": True}],
+    }
+    with open(os.path.join(d, "assurance-package.json"), "w") as f:
+        json.dump(manifest, f)
+    report = run_verify(d, None, "2026-11-02T00:00:00Z")
+    assert report["verdict"] == "PASS", report["verdict"]
+    assert not any(dg["code"] == "pap.package.limit-exceeded" for dg in report["diagnostics"])
+
+    # exactly 32 envelopes
+    d2 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d2, "artifacts"))
+    os.makedirs(os.path.join(d2, "signatures"))
+    with open(os.path.join(d2, "artifacts", "a.txt"), "wb") as f:
+        f.write(ab)
+    for i in range(32):
+        with open(os.path.join(d2, "signatures", f"e{i}.dsse.json"), "w") as f:
+            f.write("{}")
+    manifest2 = dict(manifest)
+    manifest2["package"] = {"id": "urn:test:sig32"}
+    with open(os.path.join(d2, "assurance-package.json"), "w") as f:
+        json.dump(manifest2, f)
+    report2 = run_verify(d2, None, "2026-11-02T00:00:00Z")
+    assert not any(dg["scope"] == "signatureEnvelopes" for dg in report2["diagnostics"])
+
+    # 33 envelopes
+    d3 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d3, "artifacts"))
+    os.makedirs(os.path.join(d3, "signatures"))
+    with open(os.path.join(d3, "artifacts", "a.txt"), "wb") as f:
+        f.write(ab)
+    for i in range(33):
+        with open(os.path.join(d3, "signatures", f"e{i}.dsse.json"), "w") as f:
+            f.write("{}")
+    manifest3 = dict(manifest)
+    manifest3["package"] = {"id": "urn:test:sig33"}
+    with open(os.path.join(d3, "assurance-package.json"), "w") as f:
+        json.dump(manifest3, f)
+    report3 = run_verify(d3, None, "2026-11-02T00:00:00Z")
+    assert report3["verdict"] == "INCOMPLETE"
+    assert report3["coverage"]["full"] is False
+    assert any(dg["scope"] == "signatureEnvelopes" for dg in report3["diagnostics"])
+
+    # signatures directory enumeration failure
+    d4 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(d4, "artifacts"))
+    with open(os.path.join(d4, "artifacts", "a.txt"), "wb") as f:
+        f.write(ab)
+    # signatures as a regular file (not directory)
+    with open(os.path.join(d4, "signatures"), "w") as f:
+        f.write("x")
+    manifest4 = dict(manifest)
+    manifest4["package"] = {"id": "urn:test:sigfail"}
+    with open(os.path.join(d4, "assurance-package.json"), "w") as f:
+        json.dump(manifest4, f)
+    report4 = run_verify(d4, None, "2026-11-02T00:00:00Z")
+    assert report4["verdict"] == "INCOMPLETE"
+    assert any(dg["code"] == "pap.package.io" and dg["scope"] == "signatures" for dg in report4["diagnostics"])
+
+
+def test_checker_closure_fail_closed():
+    import os
+    from pap_verifier import identities
+    orig_files = identities._closure_file_entries
+    orig_deps = identities._dependency_records
+
+    def missing_file():
+        raise RuntimeError("missing required closure file: pap/schemas/manifest.schema.json")
+
+    def missing_dep():
+        raise RuntimeError("missing required dependency: cryptography")
+
+    identities._closure_file_entries = missing_file
+    try:
+        try:
+            identities.implementation_digest()
+            assert False
+        except RuntimeError as e:
+            assert "missing required closure file" in str(e)
+    finally:
+        identities._closure_file_entries = orig_files
+
+    identities._dependency_records = missing_dep
+    try:
+        try:
+            identities.implementation_digest()
+            assert False
+        except RuntimeError as e:
+            assert "missing required dependency" in str(e)
+    finally:
+        identities._dependency_records = orig_deps
+
+
+def test_checker_closure_sensitivity():
+    from pap_verifier.identities import implementation_digest_entries
+    base_entries = [("src/a.py", b"x"), ("pap/schemas/m.json", b"{}")]
+    base_deps = [("cryptography", "43.0.0", "sha256:abc")]
+    base = implementation_digest_entries(base_entries, base_deps)
+    assert implementation_digest_entries([("src/a.py", b"y"), ("pap/schemas/m.json", b"{}")], base_deps) != base
+    assert implementation_digest_entries(base_entries, [("cryptography", "43.0.0", "sha256:def")]) != base
+    # excluded file outside closure does not affect production closure enumeration
+    from pap_verifier.identities import _closure_file_entries
+    paths = [p for p, _ in _closure_file_entries()]
+    assert "README.md" not in paths
+    assert not any(p.startswith("tests/") for p in paths)
