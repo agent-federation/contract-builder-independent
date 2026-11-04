@@ -5,7 +5,7 @@
 Repository: agent-federation/contract-builder
 
 Commit:
-c6ee64416c91ab56f9d8270114c8f8a8b9d2f608
+c21907890ceb45c5d3c4d72a0a736102b984815a
 
 PAP version: 0.1
 
@@ -15,6 +15,14 @@ This repository contains a frozen specification and conformance
 material snapshot for an independent PAP verifier implementation.
 
 It is intended to support Gate 3 interoperability validation.
+
+## Inventory model
+
+`manifest.json.files` lists the files copied from the source commit: the PAP
+fixtures, schemas, RFC and maintainer decision. `manifest.json.bundle_local` lists
+repository-authored metadata that is not part of the source copy; the only such
+entry is this provenance document. `SHA256SUMS` covers both inventories and the
+manifest itself.
 
 ## Included materials
 

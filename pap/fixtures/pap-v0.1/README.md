@@ -12,29 +12,21 @@ is a complete package copy; nothing is generated or mutated at test time.
 - `signatures/` — shared DSSE envelopes. The keys are test fixtures; no private
   key is committed. `trusted.dsse.json` and `unknown.dsse.json` are signed over
   the base canonical manifest; `invalid.dsse.json` has one corrupted signature.
-- `cases.json` — the machine-readable index of conformance cases
-  and their expected outcomes.
+- `cases.json` — the case index consumed by
+  `pap/tests/conformance.test.ts`.
 
-## Using the conformance corpus
+Run the corpus:
 
-The `cases.json` file is the machine-readable index of the PAP v0.1 conformance cases and their expected outcomes.
+```bash
+bun test pap/tests/conformance.test.ts
+```
 
-Each `F01`–`F61` directory contains the fixture material for an individual conformance case. Use these fixtures to validate an implementation against the expected behavior documented by the corpus and the normative RFC.
-
-The independent implementation is responsible for providing its own test harness. The corpus does not prescribe a programming language, test framework, command-line interface, or internal implementation architecture.
-
-For each case, record at minimum:
-
-- Case identifier.
-- Expected outcome.
-- Actual outcome.
-- Whether the relevant checks were evaluated.
-- Any observed discrepancy or implementation limitation.
-
-Do not modify the supplied fixtures or expected outcomes to make an implementation pass. If a case appears ambiguous, inconsistent, or incompatible with the normative RFC, record the discrepancy separately and request clarification rather than silently changing the expected behavior.
-
-The corpus is conformance evidence, not an exhaustive specification. The normative RFC remains authoritative. Passing all supplied cases does not by itself establish full conformance or interoperability with another implementation.
-
+The harness runs each `command` (argv after `pap`) with the case directory as cwd,
+a fixed `--now`, a hostile `TZ`/`LC_ALL`, a producer-free `PATH` with sentinel
+`bun`/`node`/`contract-builder` shims, and asserts the projection in
+`cases.json`: exit code, verdict, constrained dimensions, check outcomes,
+diagnostic and limitation code sets, coverage, effective limits, identity
+relations, Appendix C schema validity, JCS bytes and deterministic reruns.
 
 ## Limit cases
 

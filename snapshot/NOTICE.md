@@ -5,7 +5,7 @@ This directory contains a frozen snapshot of normative and supporting source mat
 ## Source and provenance
 
 - **Source repository:** https://github.com/agent-federation/contract-builder
-- **Source commit:** `c6ee64416c91ab56f9d8270114c8f8a8b9d2f608`
+- **Source commit:** `c21907890ceb45c5d3c4d72a0a736102b984815a`
 - **Snapshot inventory:** [`manifest.json`](manifest.json)
 - **Checksum inventory:** [`SHA256SUMS`](SHA256SUMS)
 
