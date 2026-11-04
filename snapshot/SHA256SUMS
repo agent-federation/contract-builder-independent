@@ -1,4 +1,4 @@
-a171fdcfc7da76af302eea3a270c5b63506b07ce74c3ebd784401e48e7e543c1  docs/architecture/portable-assurance-package-rfc.md
+799ebab9ea033827c3b1bffb97cf9a7add054b69f12b49e675b353cbadc8cb22  docs/architecture/portable-assurance-package-rfc.md
 f0611bbd733ec89852c6d0423c5d210c463a1a4f2f390cf14ab00a77d5441119  docs/maintainer-decision.md
 e7f0e9c305af7f1cfe6d550881e3aff095644697c168e82b473e41fee97e0347  pap/fixtures/pap-v0.1/F01-unchanged/artifacts/ACME-SUPPLIER.draft.md
 6fbea7f3c2604187ca5530fa0bf8865ecf959d012f608dd603ecb946007ea0e6  pap/fixtures/pap-v0.1/F01-unchanged/assurance-package.json
@@ -395,7 +395,8 @@ e7f0e9c305af7f1cfe6d550881e3aff095644697c168e82b473e41fee97e0347  pap/fixtures/p
 07b9d51b8054ba4fccce875843abe719ea18843d822050485d658a3b00a62d2f  pap/fixtures/pap-v0.1/F61-relations-only-lowered/claims/relations.json
 d214619d8a19cd28df83497fb1252a9c7e392cfd1725819f1472edf487140db1  pap/fixtures/pap-v0.1/F61-relations-only-lowered/inputs/project.yml
 0ee2186aefd71928e6dcdddc8557734411cc6228fef31b2be82a7aaf7fa6c72f  pap/fixtures/pap-v0.1/F61-relations-only-lowered/sources/acme-policy.md
-c75db5c1a65b9537e13db099770d44afa5f8045d674b019ef4b194e376920814  pap/fixtures/pap-v0.1/README.md
+38317887ad9ca7961629c61c36744fa755582939ac011fb4063f3e1f4c781f7e  pap/fixtures/pap-v0.1/README.md
+81f5d80365e91b9fa4ae4be8202fa440181de22cf6e88d421a20a5b3d1d9f2a7  pap/fixtures/pap-v0.1/archive.tar
 e7f0e9c305af7f1cfe6d550881e3aff095644697c168e82b473e41fee97e0347  pap/fixtures/pap-v0.1/base/artifacts/ACME-SUPPLIER.draft.md
 6fbea7f3c2604187ca5530fa0bf8865ecf959d012f608dd603ecb946007ea0e6  pap/fixtures/pap-v0.1/base/assurance-package.json
 5c1bf736366d20332f5a7da5944c06ca4158ef8b3a8b606c79f1d32db86ed0c0  pap/fixtures/pap-v0.1/base/claims/producer-report.json
@@ -403,6 +404,7 @@ e7f0e9c305af7f1cfe6d550881e3aff095644697c168e82b473e41fee97e0347  pap/fixtures/p
 07b9d51b8054ba4fccce875843abe719ea18843d822050485d658a3b00a62d2f  pap/fixtures/pap-v0.1/base/claims/relations.json
 d214619d8a19cd28df83497fb1252a9c7e392cfd1725819f1472edf487140db1  pap/fixtures/pap-v0.1/base/inputs/project.yml
 0ee2186aefd71928e6dcdddc8557734411cc6228fef31b2be82a7aaf7fa6c72f  pap/fixtures/pap-v0.1/base/sources/acme-policy.md
+4ac4a9440747296976e64a6fb0f35cb836419d78644c44ce2e9d582de3b319dc  pap/fixtures/pap-v0.1/cases-phase2a.json
 8ae2693b34a31f1a49fdee0e5e5e235419e8d510d2a9b6f84e809b0c1ef154df  pap/fixtures/pap-v0.1/cases.json
 189652632ba305d6d14c66b41953f636064f934f8888a7068ecffff8a244c90f  pap/fixtures/pap-v0.1/signatures/invalid.dsse.json
 79e63e0a6650006302bfc7d6805170a7d44e738b087e382a585ab878d9e99424  pap/fixtures/pap-v0.1/signatures/trusted.dsse.json
@@ -430,5 +432,5 @@ af1858e243d3c086c6649524dc67ca4ad6d9b6c711f0b8a5df4f70324478f08b  pap/schemas/in
 9d28e0e7faad2fd9c3ba3788237513bdb873c3f0f3bbd1a6ab9f0e9562a8fa26  pap/schemas/manifest.schema.json
 be70c90261318703823523995837d21f8d97c189030334b8fd939ce65fa6e949  pap/schemas/trust-policy.schema.json
 c3fe36da46fa2f75b74d3deea405bf4c80eebcfb281116e2dcdaa54bde01bc99  pap/schemas/verification-report.schema.json
-e74ebf27c9c5c5bac26811ef140e74535a775c6f7c6eb6d0faa381e2bcebd35c  snapshot/manifest.json
-64116de36f4d1dbafd3262956cb6f9cf96c9d814ef8ad9a5f0c123c83c4899c5  snapshot/source-provenance.md
+0855f5663ddce3b74a8d55045fc2147ae20d3c50e571e3a682e352f0158db8a9  snapshot/manifest.json
+52387440317a0e30b138b8303c6d85a4e90da02d2ef2a240897163e6daebe613  snapshot/source-provenance.md
