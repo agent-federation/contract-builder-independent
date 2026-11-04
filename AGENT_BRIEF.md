@@ -128,6 +128,11 @@ It must:
 - enforce root confinement;
 - reject invalid, duplicate and case-colliding paths as specified;
 - reject symlinks and non-regular files as required;
+- resolve a `PACKAGE` argument that is a symbolic link to a directory once and use the resolved
+  directory as the package root; symbolic links at or below a declared payload path remain
+  rejected (RFC §4.3.2, §9.2);
+- report an undeclared-file scan that cannot complete as the RFC §4.3.3 scan-incomplete
+  condition (`pap.package.undeclared-scan-incomplete`, `coverage.full: false`), never as a pass;
 - distinguish missing declared files from permitted undeclared files;
 - enforce applicable package and filesystem resource limits;
 - avoid following paths outside the package root;
@@ -198,6 +203,52 @@ Every applicable Appendix E vector must pass.
 
 Do not implement cryptographic signature verification or signer trust in this phase.
 
+### 4.4.1 Checker identity
+
+Phase 2a MUST compute and report the verifier's own checker identity. This is the
+`implementationDigest` and `checkerIdentity` construction of RFC §5.8; it is not a
+package-derived identity and MUST NOT be copied from package data.
+
+```text
+implementationDigest = extensionClosureDigest(kind="checker", id=<verifier-id>,
+                                              version=<verifier-version>,
+                                              files=<closure-files>,
+                                              dependencies=<pinned-dependencies>)
+checkerIdentity      = H("pap.checker.identity.v1",
+                         JCS({"id": <verifier-id>, "version": <verifier-version>,
+                              "implementationDigest": implementationDigest}))
+```
+
+- `<verifier-id>` is `pap.verifier.<language>`; `<verifier-version>` is `0.1.0`. The same
+  values MUST appear in `verifier.id`/`verifier.version` in every report and in every check
+  record's `checker` object.
+- `files` is the implementation's own source closure: every tracked text file that contributes
+  to building the verifier, with repo-relative POSIX paths sorted in ascending UTF-8 byte
+  order. Include source, build manifests and lockfiles. Exclude tests, fixtures, documentation
+  and generated files that are not build inputs. Normalize text per RFC §5.2 (UTF-8;
+  CRLF/CR → LF); a binary file in the closure is an error.
+- `dependencies` is the complete pinned third-party dependency closure declared by the
+  implementation's lockfile/build manifest: one `(name, version, integrity)` record per package,
+  sorted by name then version, with `integrity` copied verbatim from the lockfile for the artifact
+  the build actually consumes (for example a Cargo checksum, a Go module `h1:` value, or the
+  selected wheel/sdist hash). A lockfile may carry several integrity values for one package
+  (`uv.lock` per-wheel/sdist hashes; `go.sum` module and `/go.mod` lines); the record is one per
+  package, generated metadata such as `/go.mod` lines and unselected wheels are not separate
+  dependencies, and the selected artifact is recorded in the experiment record's `artifact` field
+  (outside the hash). The selection rule
+  must be deterministic for the implementation. The language runtime and standard library are
+  not dependency records; record the compiler/runtime name and version in the experiment record.
+- Compute the closure at build or run time from the bytes present in the implementation
+  checkout. Never copy a digest from package data, a previous run, another implementation or
+  the reference verifier.
+- Appendix E.3 is the normative checker-identity vector. Reproduce both its
+  `implementationDigest` and `checkerIdentity` values exactly.
+- Self-check, both directions, with the commands and before/after digests recorded:
+  (a) change one byte of one included file; rebuild if the implementation has a build step,
+  otherwise re-run, and recompute — the digest MUST change;
+  (b) change a file outside the closure; rebuild/re-run and recompute — the digest MUST NOT
+  change.
+
 ### 4.5 Report construction
 
 Implement the Phase 2a report foundation using Appendix C.
@@ -211,6 +262,10 @@ The implementation must:
 - report package-derived identities correctly;
 - represent diagnostics and limitations according to the schema;
 - avoid inventing successful check results.
+
+The report's `verifier` object MUST contain `id`, `version`, `implementationDigest` and
+`checkerIdentities[]`. The array MUST contain exactly one element for a one-binary
+implementation, and that element MUST equal `identities.checkerIdentity`.
 
 A report must never imply that a required check passed when that check was not evaluated.
 
@@ -347,6 +402,7 @@ Include tests for:
 - source and input digest calculations;
 - quote-related digest primitives where applicable to the Phase 2a boundary;
 - identity-form exclusions and record identity where required by the Phase 2a specification.
+- checker identity: Appendix E.3, plus the two-way closure self-check.
 
 ### 7.2 Parsing and schema tests
 
@@ -401,6 +457,12 @@ For every case considered in Phase 1, document:
 Do not weaken normative expectations to make the implementation pass.
 
 If the exact Phase 2a case subset is ambiguous, record the ambiguity and request maintainer clarification.
+
+The Phase 2a comparison scope is published as
+`pap/fixtures/pap-v0.1/cases-phase2a.json`. It is experiment metadata, not an amendment to RFC
+§12: `cases.json` remains the normative corpus. Use the case set to select the cases and fields
+a Phase 2a verifier must match; record any case it excludes as later-phase and do not claim it
+as Phase 2a acceptance.
 
 ---
 
@@ -479,6 +541,9 @@ Record:
 - exit codes;
 - final commit SHA;
 - SHA-256 of the frozen input manifest.
+- the implementation identity record: `verifier.id`, `verifier.version`, `implementationDigest`,
+  `checkerIdentity`, the closure file list (or its hash), the dependency records and both
+  self-check results.
 
 Run the final test suite from a clean checkout.
 
